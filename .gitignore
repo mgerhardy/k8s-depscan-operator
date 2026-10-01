@@ -1,0 +1,52 @@
+# Binaries and build output
+/bin/
+/dist/
+/site/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/manager
+
+# Test binaries, output, and coverage
+*.test
+*.out
+coverage.*
+*.cover
+profile.cov
+
+# Go workspace / vendor
+/vendor/
+go.work
+go.work.sum
+
+# Dependency / build caches
+.cache/
+
+# Editors and IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Local kubeconfig / secrets (never commit credentials)
+kubeconfig
+*.kubeconfig
+*.pem
+*.key
+.env
+.env.*
+
+# Local overrides / environment-specific configs (may contain internal
+# hostnames or cluster details; never commit these)
+*.local.yaml
+config/samples/depscanconfig.local.yaml
+
+# Session handoff notes (may reference internal clusters/registries)
+HANDOFF.md

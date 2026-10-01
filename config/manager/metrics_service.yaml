@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: depscan-operator-metrics
+  namespace: depscan-system
+  labels:
+    app.kubernetes.io/name: k8s-depscan-operator
+    app.kubernetes.io/component: controller-manager
+spec:
+  selector:
+    app.kubernetes.io/name: k8s-depscan-operator
+    app.kubernetes.io/component: controller-manager
+  ports:
+    - name: https-metrics
+      port: 8443
+      targetPort: metrics

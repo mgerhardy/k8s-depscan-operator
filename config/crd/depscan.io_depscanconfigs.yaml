@@ -1,0 +1,453 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: depscanconfigs.depscan.io
+spec:
+  group: depscan.io
+  names:
+    kind: DepScanConfig
+    listKind: DepScanConfigList
+    plural: depscanconfigs
+    shortNames:
+    - dsc
+    singular: depscanconfig
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="ConfigValid")].status
+      name: Valid
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="VDBReady")].status
+      name: VDB Ready
+      type: string
+    - jsonPath: .status.vdb.version
+      name: VDB Version
+      type: string
+    - jsonPath: .spec.scannerImage
+      name: Scanner
+      priority: 1
+      type: string
+    - jsonPath: .spec.defectDojo.enabled
+      name: DefectDojo
+      priority: 1
+      type: boolean
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: DepScanConfig is the Schema for the cluster-wide operator configuration.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              DepScanConfigSpec configures operator-wide scan behavior. A single
+              cluster-scoped object (conventionally named "default") drives the operator.
+            properties:
+              craneImage:
+                default: gcr.io/go-containerregistry/crane:v0.22.1@sha256:1f968817b95790bed063f71175aa6b8ff879fa17064020415f3e18bb6e6a36e1
+                description: |-
+                  CraneImage is the image used to fetch each target image from its registry
+                  before scanning. The default works for public and private registries.
+                type: string
+              defectDojo:
+                description: DefectDojo enables and configures export of CSAF VEX
+                  reports.
+                properties:
+                  allowInsecureURL:
+                    description: |-
+                      AllowInsecureURL permits a plain http:// DefectDojo URL. Off by default
+                      so credentials are not sent in cleartext by misconfiguration.
+                    type: boolean
+                  closeOldFindings:
+                    default: true
+                    description: CloseOldFindings maps to the reimport-scan close_old_findings
+                      flag.
+                    type: boolean
+                  credentialsSecret:
+                    description: |-
+                      CredentialsSecret references a Secret holding DefectDojo credentials:
+                      an API "token" (preferred), or "username" (optional, default admin) and
+                      "password".
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        description: Namespace defaults to the operator namespace
+                          when empty.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  enabled:
+                    description: Enabled gates all DefectDojo export.
+                    type: boolean
+                  engagementName:
+                    default: Cluster Dep-Scan Reachability Analysis
+                    description: EngagementName is the engagement used for all uploads.
+                    type: string
+                  productNameTemplate:
+                    default: '{namespace}'
+                    description: |-
+                      ProductNameTemplate builds the DefectDojo product name. Supports the
+                      placeholders {namespace} and {image}. Defaults to "{namespace}".
+                    type: string
+                  productType:
+                    default: Research and Development
+                    description: ProductType is the product type used for auto-created
+                      products.
+                    type: string
+                  scanType:
+                    default: CSAF Scan
+                    description: ScanType is the DefectDojo scan type for the uploaded
+                      report.
+                    type: string
+                  url:
+                    description: URL is the DefectDojo base URL.
+                    pattern: ^https?://[^\s/]+
+                    type: string
+                required:
+                - credentialsSecret
+                - enabled
+                - url
+                type: object
+              excludeNamespaces:
+                description: |-
+                  ExcludeNamespaces are never scanned, taking precedence over
+                  IncludeNamespaces. The operator's own namespace and kube-system are good
+                  candidates. Entries may be shell-style globs (e.g. "*-system"); an entry
+                  without glob characters is matched exactly.
+                items:
+                  type: string
+                type: array
+              includeNamespaces:
+                description: |-
+                  IncludeNamespaces restricts scanning to these namespaces. Empty means
+                  all namespaces except those in ExcludeNamespaces. Entries may be
+                  shell-style globs (e.g. "team-*", "*-prod"); an entry without glob
+                  characters is matched exactly.
+                items:
+                  type: string
+                type: array
+              jobNamespace:
+                description: |-
+                  JobNamespace is where scan Jobs are created. Defaults to the operator
+                  namespace when empty.
+                type: string
+              jobTTLSeconds:
+                default: 600
+                description: |-
+                  JobTTLSeconds is the TTL applied to finished scan Jobs. Finished Jobs
+                  are kept at least briefly so their logs can be read.
+                format: int32
+                minimum: 1
+                type: integer
+              maxConcurrentScans:
+                default: 5
+                description: |-
+                  MaxConcurrentScans caps how many scan Jobs run at once, bounding the
+                  number of heavy scan pods a burst of new images can create. 0 uses the
+                  default.
+                format: int32
+                minimum: 0
+                type: integer
+              platform:
+                description: |-
+                  Platform forces the os/arch (e.g. "linux/amd64") pulled for every scan.
+                  Empty (the default) scans the variant matching the node each image runs
+                  on, so arm64 nodes get arm64 scans.
+                pattern: ^[a-z0-9]+/[a-z0-9]+(/[a-z0-9]+)?$
+                type: string
+              rescanInterval:
+                default: 24h
+                description: |-
+                  RescanInterval is how long a report stays valid before the image is
+                  rescanned. Expressed as a Go duration string (e.g. "24h").
+                type: string
+                x-kubernetes-validations:
+                - message: must be a Go duration such as 24h, 90m or 30s
+                  rule: self.matches('^([0-9]+([.][0-9]+)?(ns|us|µs|ms|s|m|h))+$')
+              resources:
+                description: Resources are the resource requirements applied to scan
+                  Jobs.
+                properties:
+                  limits:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    maxProperties: 3
+                    type: object
+                    x-kubernetes-validations:
+                    - message: only cpu, memory and ephemeral-storage are supported
+                      rule: self.all(k, k in ['cpu', 'memory', 'ephemeral-storage'])
+                  requests:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Values are Kubernetes quantities (e.g. "500m", "2Gi"), validated by the
+                      API server's built-in quantity schema.
+                    maxProperties: 3
+                    type: object
+                    x-kubernetes-validations:
+                    - message: only cpu, memory and ephemeral-storage are supported
+                      rule: self.all(k, k in ['cpu', 'memory', 'ephemeral-storage'])
+                type: object
+              scanByDigest:
+                description: |-
+                  ScanByDigest scans the image digest a container actually runs (from the
+                  pod status) instead of the tag in the pod spec, so a moved tag (e.g.
+                  ":latest") cannot make a report describe a different image than the one
+                  running. Reports are then keyed by digest: each new digest gets a fresh
+                  report and the old one is pruned. Off by default because some registries
+                  (e.g. certain Artifactory repositories) do not serve manifests by digest.
+                type: boolean
+              scanProfile:
+                default: research
+                description: |-
+                  ScanProfile is dep-scan's analysis profile (its --profile value).
+                  "research" enables reachability analysis; "generic" is a faster scan
+                  without it. See dep-scan docs for the full list.
+                enum:
+                - research
+                - generic
+                - appsec
+                - operational
+                - threat-modeling
+                - license-compliance
+                type: string
+              scanTimeout:
+                default: 1h
+                description: |-
+                  ScanTimeout bounds how long a scan Job may run before it is failed
+                  (activeDeadlineSeconds). It keeps a hanging or pathological image from
+                  holding a MaxConcurrentScans slot indefinitely. A Go duration string.
+                type: string
+                x-kubernetes-validations:
+                - message: must be a Go duration such as 24h, 90m or 30s
+                  rule: self.matches('^([0-9]+([.][0-9]+)?(ns|us|µs|ms|s|m|h))+$')
+              scanWorkSizeLimit:
+                default: 20Gi
+                description: |-
+                  ScanWorkSizeLimit caps the scratch volume holding the pulled image
+                  archive (an emptyDir sizeLimit). A scan pod exceeding it is evicted
+                  instead of filling the node's disk.
+                pattern: ^(([0-9]+([.][0-9]*)?)|([.][0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE][-+]?(([0-9]+([.][0-9]*)?)|([.][0-9]+))))?$
+                type: string
+              scannerImage:
+                default: ghcr.io/owasp-dep-scan/dep-scan:v6.3.0@sha256:c305f241a3c2e35a90472ef7cb971b03904f719a6b736ab40b4a0039ce8470c4
+                description: ScannerImage is the dep-scan container image to run.
+                type: string
+              vdbCache:
+                default:
+                  enabled: true
+                description: |-
+                  VDBCache configures persistence of the dep-scan vulnerability database
+                  to speed up subsequent scans. Enabled by default: without it every scan
+                  downloads the full (tens of GB) database into node-local scratch space.
+                  Set enabled: false to opt out.
+                properties:
+                  accessMode:
+                    default: ReadWriteOnce
+                    description: |-
+                      AccessMode is the PVC access mode for a provisioned cache. Use
+                      ReadWriteMany on multi-node clusters (e.g. with an EFS/NFS storage class)
+                      so scan pods on different nodes can share one cache; ReadWriteOnce only
+                      works when all scan pods land on a single node.
+                    enum:
+                    - ReadWriteOnce
+                    - ReadWriteMany
+                    type: string
+                  claimName:
+                    description: |-
+                      ClaimName is an existing PVC to mount at VDB_HOME. If empty and Enabled
+                      is true, the operator provisions one.
+                    type: string
+                  downloadURL:
+                    description: |-
+                      DownloadURL overrides where the prime Job fetches the vulnerability
+                      database from. It is an OCI image reference (e.g.
+                      "registry.example.com/vdb/vdbxz:v6.7") passed to dep-scan as the
+                      VDB_DATABASE_URL environment variable. Use this to pull from an internal
+                      mirror in air-gapped or egress-restricted clusters. Empty uses dep-scan's
+                      built-in default source.
+                    type: string
+                  enabled:
+                    default: true
+                    description: Enabled turns on PVC-backed caching of the VDB across
+                      scan Jobs.
+                    type: boolean
+                  primeTimeout:
+                    default: 4h
+                    description: |-
+                      PrimeTimeout bounds how long a VDB prime Job may run. A Go duration
+                      string.
+                    type: string
+                    x-kubernetes-validations:
+                    - message: must be a Go duration such as 24h, 90m or 30s
+                      rule: self.matches('^([0-9]+([.][0-9]+)?(ns|us|µs|ms|s|m|h))+$')
+                  refreshInterval:
+                    default: 24h
+                    description: |-
+                      RefreshInterval is how often the operator re-primes the VDB to a new
+                      version. A Go duration string (e.g. "24h").
+                    type: string
+                    x-kubernetes-validations:
+                    - message: must be a Go duration such as 24h, 90m or 30s
+                      rule: self.matches('^([0-9]+([.][0-9]+)?(ns|us|µs|ms|s|m|h))+$')
+                  scope:
+                    default: app+os
+                    description: |-
+                      Scope selects how much of the vulnerability database to download.
+                      "app+os" (the default) is the full database covering application and OS
+                      distro packages; it is large (tens of GB extracted), so size the cache
+                      accordingly. "app" downloads only application-ecosystem vulnerabilities,
+                      a much smaller database, at the cost of not flagging OS/distro package
+                      CVEs. Use "app" when your scan targets are application images without
+                      meaningful OS layers, or to keep the cache small.
+                    enum:
+                    - app
+                    - app+os
+                    type: string
+                  size:
+                    default: 100Gi
+                    description: |-
+                      Size is the requested size when the operator provisions the PVC. The
+                      default suits the full "app+os" database, which is roughly 70 GB
+                      extracted plus the compressed artifact and extraction headroom. With
+                      Scope "app" a much smaller cache (around 5Gi) is enough.
+                    pattern: ^(([0-9]+([.][0-9]*)?)|([.][0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE][-+]?(([0-9]+([.][0-9]*)?)|([.][0-9]+))))?$
+                    type: string
+                  storageClassName:
+                    description: StorageClassName optionally pins the PVC storage
+                      class.
+                    type: string
+                type: object
+            type: object
+          status:
+            description: |-
+              DepScanConfigStatus reports how the operator applies the config and the
+              state of the shared vulnerability database.
+            properties:
+              conditions:
+                description: 'Conditions: ConfigValid and VDBReady.'
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: ObservedGeneration is the spec generation the status
+                  describes.
+                format: int64
+                type: integer
+              vdb:
+                description: VDB describes the shared vulnerability database cache.
+                properties:
+                  consecutiveFailures:
+                    description: ConsecutiveFailures counts failed prime attempts
+                      since the last success.
+                    format: int32
+                    type: integer
+                  lastError:
+                    description: LastError explains the most recent failed prime.
+                    type: string
+                  nextRetry:
+                    description: NextRetry is when the next prime is attempted after
+                      a failure.
+                    format: date-time
+                    type: string
+                  primedAt:
+                    description: PrimedAt is when that version was last downloaded
+                      or confirmed.
+                    format: date-time
+                    type: string
+                  version:
+                    description: Version is the database version scans currently use.
+                    type: string
+                type: object
+            type: object
+        type: object
+        x-kubernetes-validations:
+        - message: the operator only reads the DepScanConfig named 'default'
+          rule: self.metadata.name == 'default'
+    served: true
+    storage: true
+    subresources:
+      status: {}

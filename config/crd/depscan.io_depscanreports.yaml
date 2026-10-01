@@ -1,0 +1,285 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: depscanreports.depscan.io
+spec:
+  group: depscan.io
+  names:
+    kind: DepScanReport
+    listKind: DepScanReportList
+    plural: depscanreports
+    shortNames:
+    - dsr
+    - depscanreport
+    singular: depscanreport
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.image
+      name: Image
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.summary.totalCount
+      name: Total
+      type: integer
+    - jsonPath: .status.summary.criticalCount
+      name: Critical
+      type: integer
+    - jsonPath: .status.summary.highCount
+      name: High
+      type: integer
+    - jsonPath: .status.summary.mediumCount
+      name: Medium
+      priority: 1
+      type: integer
+    - jsonPath: .status.summary.lowCount
+      name: Low
+      priority: 1
+      type: integer
+    - description: Critical findings marked reachable
+      jsonPath: .status.summary.reachableCriticalCount
+      name: Reach Crit
+      type: integer
+    - description: High findings marked reachable
+      jsonPath: .status.summary.reachableHighCount
+      name: Reach High
+      type: integer
+    - description: Findings marked reachable, all severities
+      jsonPath: .status.summary.reachableCount
+      name: Reachable
+      type: integer
+    - jsonPath: .status.exposure
+      name: Exposure
+      type: string
+    - jsonPath: .status.updateTimestamp
+      name: Last Scan
+      type: date
+    - jsonPath: .status.message
+      name: Message
+      priority: 1
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          DepScanReport holds the scan results for one (namespace, image) pair, so
+          findings can be queried per namespace.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: DepScanReportSpec identifies what was scanned.
+            properties:
+              image:
+                description: Image is the full image reference (repo:tag or repo@sha256:...).
+                maxLength: 2048
+                pattern: ^[A-Za-z0-9._:/@-]+$
+                type: string
+              imagePullSecrets:
+                description: |-
+                  ImagePullSecrets are the names of docker-registry Secrets, in this
+                  report's namespace, that hold credentials for the image's registry.
+                  They are collected from the workloads using the image so the scan can
+                  pull from private registries in a cluster-agnostic way.
+                items:
+                  type: string
+                type: array
+              platform:
+                description: |-
+                  Platform is the os/arch (e.g. "linux/arm64") of the node the image was
+                  first seen running on; the scan pulls that variant of a multi-arch
+                  image. Empty means linux/amd64 unless the config sets a platform.
+                pattern: ^[a-z0-9]+/[a-z0-9]+(/[a-z0-9]+)?$
+                type: string
+              workloads:
+                description: Workloads lists the workloads in this namespace that
+                  use the image.
+                items:
+                  description: WorkloadRef references a workload that runs the scanned
+                    image.
+                  properties:
+                    container:
+                      type: string
+                    kind:
+                      type: string
+                    name:
+                      type: string
+                  required:
+                  - kind
+                  - name
+                  type: object
+                type: array
+            required:
+            - image
+            type: object
+          status:
+            description: DepScanReportStatus holds the scan outcome.
+            properties:
+              consecutiveFailures:
+                description: |-
+                  ConsecutiveFailures counts failed scans since the last successful one;
+                  it drives the retry backoff.
+                format: int32
+                type: integer
+              exported:
+                description: Exported indicates whether this report was pushed to
+                  DefectDojo.
+                type: boolean
+              exposure:
+                description: |-
+                  Exposure is the network reachability tier of the workloads running this
+                  image, computed from Services and Ingresses.
+                type: string
+              exposureEvidence:
+                description: ExposureEvidence briefly explains how Exposure was determined.
+                type: string
+              message:
+                description: Message carries error or status detail.
+                type: string
+              phase:
+                description: Phase is the current lifecycle phase.
+                type: string
+              reachabilityAnalyzed:
+                description: |-
+                  ReachabilityAnalyzed is true when dep-scan ran reachability analysis for
+                  this image. When false, the reachability counts are "not analyzed" rather
+                  than "none reachable": a zero ReachableCount with ReachabilityAnalyzed
+                  false means reachability was never determined (e.g. OS-only images), not
+                  that the image is free of reachable findings.
+                type: boolean
+              scanJob:
+                description: ScanJob is the name of the Job that produced this report.
+                type: string
+              scanner:
+                description: Scanner records the dep-scan version/image used.
+                type: string
+              summary:
+                description: Summary aggregates findings by severity.
+                properties:
+                  criticalCount:
+                    description: CriticalCount is the number of findings rated critical
+                      severity.
+                    type: integer
+                  highCount:
+                    description: HighCount is the number of findings rated high severity.
+                    type: integer
+                  lowCount:
+                    description: LowCount is the number of findings rated low severity.
+                    type: integer
+                  mediumCount:
+                    description: MediumCount is the number of findings rated medium
+                      (or moderate) severity.
+                    type: integer
+                  noneCount:
+                    description: |-
+                      NoneCount is the number of findings rated none/informational (no
+                      meaningful severity, e.g. CVSS 0).
+                    type: integer
+                  notReachableCount:
+                    description: |-
+                      NotReachableCount is the number of findings dep-scan analyzed and found
+                      not reachable (vulnerable code is present but not on an execute path).
+                    type: integer
+                  reachableCount:
+                    description: |-
+                      ReachableCount is the number of findings dep-scan marked reachable,
+                      across all severities (so it can exceed CriticalCount+HighCount).
+                    type: integer
+                  reachableCriticalCount:
+                    description: |-
+                      ReachableCriticalCount is the number of critical findings marked
+                      reachable: the first ones to fix.
+                    type: integer
+                  reachableHighCount:
+                    description: ReachableHighCount is the number of high findings
+                      marked reachable.
+                    type: integer
+                  totalCount:
+                    description: TotalCount is the number of findings.
+                    type: integer
+                  unknownCount:
+                    description: |-
+                      UnknownCount is the number of findings whose severity could not be
+                      determined (missing or unrecognized rating). It is unrelated to per-CVE
+                      reachability being unknown.
+                    type: integer
+                  unknownReachabilityCount:
+                    description: |-
+                      UnknownReachabilityCount is the number of findings with no reachability
+                      data (reachability analysis did not cover them, e.g. OS/distro packages).
+                    type: integer
+                type: object
+              updateTimestamp:
+                description: UpdateTimestamp is when the report was last updated.
+                format: date-time
+                type: string
+              vulnerabilities:
+                description: Vulnerabilities is the full list of findings.
+                items:
+                  description: Vulnerability is a single finding reported by dep-scan.
+                  properties:
+                    fixedVersion:
+                      description: FixedVersion is the version that resolves the finding,
+                        if known.
+                      type: string
+                    installedVersion:
+                      description: InstalledVersion is the version present in the
+                        image.
+                      type: string
+                    primaryLink:
+                      description: PrimaryLink points to the primary advisory.
+                      type: string
+                    purl:
+                      description: PURL is the package URL of the affected component.
+                      type: string
+                    reachability:
+                      description: Reachability is the dep-scan reachability verdict.
+                      type: string
+                    resource:
+                      description: Resource is the affected package name.
+                      type: string
+                    score:
+                      description: |-
+                        Score is the CVSS base score as a string, when available (e.g. "9.8").
+                        Stored as a string to keep the CRD portable across languages.
+                      type: string
+                    severity:
+                      description: Severity is the normalized severity rating.
+                      type: string
+                    title:
+                      description: Title is a short summary of the vulnerability.
+                      type: string
+                    vulnerabilityID:
+                      description: VulnerabilityID is the CVE/GHSA/advisory identifier.
+                      type: string
+                  required:
+                  - severity
+                  - vulnerabilityID
+                  type: object
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

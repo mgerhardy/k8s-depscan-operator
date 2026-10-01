@@ -1,0 +1,55 @@
+apiVersion: depscan.io/v1alpha1
+kind: DepScanConfig
+metadata:
+  name: default
+spec:
+  scannerImage: ghcr.io/owasp-dep-scan/dep-scan:v6.3.0
+  scanProfile: research   # "research" enables reachability; "generic" is faster
+  rescanInterval: 24h
+  jobNamespace: depscan-system
+  jobTTLSeconds: 600
+  maxConcurrentScans: 5
+  # Scan everything except noisy system namespaces. Add includeNamespaces to
+  # restrict to an allow-list instead.
+  excludeNamespaces:
+    - kube-system
+    - kube-public
+    - kube-node-lease
+    - depscan-system
+  vdbCache:
+    enabled: true
+    # The full "app+os" database is large (~70GB extracted). Size the cache for
+    # it, or switch scope to "app" (below) for a much smaller database.
+    size: 100Gi
+    scope: app+os          # "app+os" = full DB (OS + app CVEs); "app" = app-only, far smaller
+    refreshInterval: 24h   # how often the shared VDB is re-primed to a new version
+    # Leave storageClassName empty to use the cluster default StorageClass.
+    storageClassName: ""
+    # Pull the vulnerability DB from an internal mirror instead of the default
+    # public source. Useful for air-gapped or egress-restricted clusters.
+    # downloadURL: registry.example.internal/vdb/vdbxz:v6.7
+    #
+    # App-only alternative (small cache, no OS/distro CVEs):
+    #   scope: app
+    #   size: 5Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+  # DefectDojo export is opt-in. Provide a Secret with username/password and
+  # flip enabled to true to push CSAF VEX reports on every completed scan.
+  defectDojo:
+    enabled: false
+    url: https://defectdojo.example.internal
+    scanType: CSAF Scan
+    productType: Research and Development
+    engagementName: Cluster Dep-Scan Reachability Analysis
+    productNameTemplate: "{namespace}"
+    closeOldFindings: true
+    # allowInsecureURL: true   # permit a plain http:// url (sends creds in cleartext)
+    credentialsSecret:
+      name: defectdojo-credentials
+      namespace: depscan-system

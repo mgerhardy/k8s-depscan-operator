@@ -1,0 +1,112 @@
+package scan
+
+import (
+	"strings"
+	"testing"
+
+	corev1 "k8s.io/api/core/v1"
+)
+
+func TestBuildPrimeJob(t *testing.T) {
+	job := BuildPrimeJob(PrimeJobConfig{
+		ScannerImage: "scanner", Namespace: "depscan-system", VDBClaim: "depscan-vdb-cache",
+	})
+	if job.Name != VDBPrimeJobName {
+		t.Errorf("name = %q", job.Name)
+	}
+	spec := job.Spec.Template.Spec
+	if spec.AutomountServiceAccountToken == nil || *spec.AutomountServiceAccountToken {
+		t.Error("prime pod must not automount SA token")
+	}
+	// Mounts the cache PVC at the cache root (writable, no subpath).
+	var mounted bool
+	for _, v := range spec.Volumes {
+		if v.Name == "vdb" && v.PersistentVolumeClaim != nil && v.PersistentVolumeClaim.ClaimName == "depscan-vdb-cache" {
+			mounted = true
+		}
+	}
+	if !mounted {
+		t.Error("prime job must mount the cache PVC")
+	}
+	script := strings.Join(spec.Containers[0].Command, " ")
+	if !strings.Contains(script, "depscan-vdb download") || !strings.Contains(script, "mv ") || !strings.Contains(script, "latest.meta") {
+		t.Errorf("prime script missing download/atomic-move/pointer steps: %q", script)
+	}
+	// Progress watcher: background download + periodic size reporting so users
+	// can gauge how long the multi-GB pull will take.
+	if !strings.Contains(script, "downloading...") || !strings.Contains(script, "du -sh") {
+		t.Errorf("prime script should emit periodic download progress: %q", script)
+	}
+	// No override by default: the prime container carries no VDB_DATABASE_URL.
+	for _, e := range spec.Containers[0].Env {
+		if e.Name == "VDB_DATABASE_URL" {
+			t.Errorf("unexpected VDB_DATABASE_URL env without an override: %q", e.Value)
+		}
+	}
+	// No scope flag by default (dep-scan defaults to app+os).
+	if strings.Contains(script, "--scope") {
+		t.Errorf("prime script should not pin a scope by default: %q", script)
+	}
+}
+
+func TestBuildPrimeJob_Scope(t *testing.T) {
+	job := BuildPrimeJob(PrimeJobConfig{
+		ScannerImage: "scanner", Namespace: "depscan-system", VDBClaim: "cache",
+		Scope: "app",
+	})
+	script := strings.Join(job.Spec.Template.Spec.Containers[0].Command, " ")
+	if !strings.Contains(script, "depscan-vdb download --scope app") {
+		t.Errorf("prime script should pass --scope app: %q", script)
+	}
+}
+
+func TestBuildPrimeJob_ReportsVersionViaTerminationMessage(t *testing.T) {
+	job := BuildPrimeJob(PrimeJobConfig{ScannerImage: "scanner", Namespace: "ns", VDBClaim: "cache"})
+	c := job.Spec.Template.Spec.Containers[0]
+	script := strings.Join(c.Command, " ")
+	if strings.Count(script, "/dev/termination-log") < 2 {
+		t.Errorf("both the reuse and publish paths must write the termination message: %q", script)
+	}
+	if c.Name != PrimeContainerName || c.TerminationMessagePolicy != corev1.TerminationMessageReadFile {
+		t.Errorf("unexpected container %q / policy %q", c.Name, c.TerminationMessagePolicy)
+	}
+}
+
+func TestBuildVDBGCJob_KeepsPointerTarget(t *testing.T) {
+	job := BuildVDBGCJob(VDBGCJobConfig{ScannerImage: "scanner", Namespace: "ns", VDBClaim: "cache", KeepVersions: []string{"a"}})
+	script := strings.Join(job.Spec.Template.Spec.Containers[0].Command, " ")
+	if !strings.Contains(script, "cat latest.meta") || !strings.Contains(script, `"$name" = "$ptr"`) {
+		t.Errorf("GC must always keep the version latest.meta names: %q", script)
+	}
+}
+
+func TestBuildPrimeJob_DownloadURLOverride(t *testing.T) {
+	const url = "registry.example.com/vdb/vdbxz:v6.7"
+	job := BuildPrimeJob(PrimeJobConfig{
+		ScannerImage: "scanner", Namespace: "depscan-system", VDBClaim: "cache",
+		DownloadURL: url,
+	})
+	var got string
+	for _, e := range job.Spec.Template.Spec.Containers[0].Env {
+		if e.Name == "VDB_DATABASE_URL" {
+			got = e.Value
+		}
+	}
+	if got != url {
+		t.Errorf("VDB_DATABASE_URL = %q, want %q", got, url)
+	}
+}
+
+func TestBuildVDBGCJob(t *testing.T) {
+	job := BuildVDBGCJob(VDBGCJobConfig{
+		ScannerImage: "scanner", Namespace: "depscan-system", VDBClaim: "c",
+		KeepVersions: []string{"v6.7-appos-2026-10-06", "v6.7-appos-2026-10-05"},
+	})
+	script := strings.Join(job.Spec.Template.Spec.Containers[0].Command, " ")
+	if !strings.Contains(script, "v6.7-appos-2026-10-06") || !strings.Contains(script, "v6.7-appos-2026-10-05") {
+		t.Errorf("gc keep-list not embedded: %q", script)
+	}
+	if !strings.Contains(script, ".tmp-*") || !strings.Contains(script, "rm -rf") {
+		t.Errorf("gc script must delete orphaned temp dirs and stale versions: %q", script)
+	}
+}

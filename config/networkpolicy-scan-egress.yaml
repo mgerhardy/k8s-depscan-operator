@@ -1,0 +1,76 @@
+# Optional egress hardening for scan pods. NOT included in the default
+# `kubectl apply -k config/` bundle because the correct egress set is
+# cluster-specific; apply it explicitly:
+#
+#   kubectl apply -f config/networkpolicy-scan-egress.yaml
+#
+# It selects the operator's scan pods (by the managed-by label) in the
+# depscan-system namespace and:
+#   - denies all ingress (scan pods never serve traffic), and
+#   - allows egress to DNS and to external (non-cluster) addresses only,
+#     blocking private (RFC1918, CGNAT, IPv6 ULA), link-local and loopback
+#     ranges so a compromised scanner cannot reach the API server (unless it
+#     has a public endpoint), other in-cluster workloads, or the cloud
+#     instance-metadata endpoint
+#     (169.254.169.254 / fd00:ec2::254), which can hand out node credentials.
+#
+# IMPORTANT: if you scan images from an in-cluster or private-network registry
+# (for example an in-cluster Harbor, an integrated registry, or a registry on
+# an RFC1918 address), the except blocks below prevent the image pull. Add a
+# dedicated egress rule allowing that registry's CIDR/namespace, or remove the
+# matching except entry.
+#
+# Requires a CNI that enforces NetworkPolicy. Some default CNIs do not.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: depscan-scan-egress
+  namespace: depscan-system
+  labels:
+    app.kubernetes.io/name: k8s-depscan-operator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: k8s-depscan-operator
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []   # deny all ingress
+  egress:
+    # DNS resolution. With NodeLocal DNSCache, pods resolve via a host-network
+    # link-local address that the link-local except below blocks; uncomment
+    # the ipBlock (adjust the address to your setup).
+    - to:
+        - namespaceSelector: {}
+        # - ipBlock:
+        #     cidr: 169.254.20.10/32
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # External (internet) egress for registry pulls, the VDB download, and
+    # advisory fetches. In-cluster/private ranges are excluded to block lateral
+    # movement; relax these if your registry lives on a private network. Keep
+    # the link-local excludes: they block the cloud metadata service.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 100.64.0.0/10    # CGNAT, used for pod/service ranges by some CNIs
+              - 169.254.0.0/16   # link-local, incl. the instance-metadata service
+              - 127.0.0.0/8
+        - ipBlock:
+            cidr: ::/0
+            except:
+              - fc00::/7         # unique-local, incl. AWS IMDS fd00:ec2::254
+              - fe80::/10        # link-local
+              - ::1/128
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80

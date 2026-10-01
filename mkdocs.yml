@@ -1,0 +1,51 @@
+site_name: k8s-depscan-operator
+site_description: >-
+  A Kubernetes operator that runs OWASP dep-scan against the container images
+  deployed in your cluster, stores CVE results in CRDs, classifies network
+  exposure, and can export CSAF VEX reports to DefectDojo.
+site_url: https://mgerhardy.github.io/k8s-depscan-operator/
+repo_url: https://github.com/mgerhardy/k8s-depscan-operator
+repo_name: mgerhardy/k8s-depscan-operator
+edit_uri: edit/main/docs/
+copyright: MIT License
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - Deploy: deploy.md
+  - Viewing results: viewing-results.md
+  - Configuration: configuration.md
+  - Vulnerability database cache: vdb-cache.md
+  - Private registries: private-registries.md
+  - Network isolation: network-isolation.md
+  - DefectDojo export: defectdojo.md
+  - Metrics: metrics.md
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - tables
