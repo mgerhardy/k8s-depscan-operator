@@ -1,0 +1,56 @@
+# Example alerts for the depscan operator. Requires the Prometheus Operator
+# (PrometheusRule CRD) and a scrape of the authenticated metrics endpoint (see
+# docs/metrics.md). Not part of `kubectl apply -k config/`; adjust thresholds
+# and apply explicitly:
+#
+#   kubectl apply -f config/prometheus/alerts.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: depscan-operator
+  namespace: depscan-system
+  labels:
+    app.kubernetes.io/name: k8s-depscan-operator
+spec:
+  groups:
+    - name: depscan-operator
+      rules:
+        - alert: DepScanOperatorDown
+          expr: absent(up{job="depscan-operator"} == 1)
+          for: 15m
+          labels: {severity: warning}
+          annotations:
+            summary: depscan operator metrics are not being scraped
+        - alert: DepScanVDBStale
+          # Twice the default 24h refreshInterval.
+          expr: depscan_vdb_age_seconds > 2 * 86400
+          for: 30m
+          labels: {severity: warning}
+          annotations:
+            summary: Vulnerability database is {{ $value | humanizeDuration }} old
+            description: Refreshes are failing; see `kubectl get dsc default -o yaml` (VDBReady condition).
+        - alert: DepScanVDBPrimeFailing
+          expr: increase(depscan_vdb_prime_failures_total[2h]) >= 3
+          labels: {severity: warning}
+          annotations:
+            summary: The vulnerability database prime keeps failing
+            description: See the VDBReady condition on DepScanConfig "default".
+        - alert: DepScanReportsFailing
+          expr: depscan_reports{phase="Failed"} > 0
+          for: 2h
+          labels: {severity: info}
+          annotations:
+            summary: "{{ $value }} image scans are failing"
+            description: "`kubectl get dsr -A` and the reports' status.message / ScanFailed events explain why."
+        - alert: DepScanBacklog
+          expr: depscan_reports{phase="Pending"} > 0 and on() sum(increase(depscan_scans_completed_total[1h])) == 0
+          for: 1h
+          labels: {severity: warning}
+          annotations:
+            summary: Scans are pending but none completed in the last hour
+        - alert: DepScanReachableVulnerabilities
+          expr: sum by (namespace) (depscan_reachability_count{state="reachable"}) > 0
+          for: 1h
+          labels: {severity: info}
+          annotations:
+            summary: Namespace {{ $labels.namespace }} runs images with reachable vulnerabilities

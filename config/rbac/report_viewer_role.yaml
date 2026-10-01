@@ -1,0 +1,33 @@
+# Read-only access to DepScanReports, aggregated into the built-in view, edit
+# and admin ClusterRoles. Anyone holding one of those in a namespace (e.g. via
+# a RoleBinding) can read that namespace's reports. Requesting a rescan
+# (annotating a report) needs `patch` and is left to cluster admins; bind
+# depscan-report-editor below to delegate it.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: depscan-report-viewer
+  labels:
+    app.kubernetes.io/name: k8s-depscan-operator
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+  - apiGroups: ["depscan.io"]
+    resources: ["depscanreports"]
+    verbs: ["get", "list", "watch"]
+---
+# Optional, not aggregated: lets a subject request rescans in a namespace
+# (`kubectl annotate dsr <name> depscan.io/rescan=now`). Patch also allows
+# editing the report spec, which the operator overwrites from the running pods
+# within the pruner interval.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: depscan-report-editor
+  labels:
+    app.kubernetes.io/name: k8s-depscan-operator
+rules:
+  - apiGroups: ["depscan.io"]
+    resources: ["depscanreports"]
+    verbs: ["get", "list", "watch", "patch"]

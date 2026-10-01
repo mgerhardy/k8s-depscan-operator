@@ -1,0 +1,11 @@
+# Grants read access to the operator's authenticated metrics endpoint. Bind it
+# to the ServiceAccount your Prometheus / Telegraf scraper uses.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: depscan-metrics-reader
+  labels:
+    app.kubernetes.io/name: k8s-depscan-operator
+rules:
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
