@@ -1,0 +1,212 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.3
+  name: depscanconfigs.depscan.io
+spec:
+  group: depscan.io
+  names:
+    kind: DepScanConfig
+    listKind: DepScanConfigList
+    plural: depscanconfigs
+    shortNames:
+    - dsc
+    singular: depscanconfig
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.scannerImage
+      name: Scanner
+      type: string
+    - jsonPath: .spec.defectDojo.enabled
+      name: DefectDojo
+      type: boolean
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: DepScanConfig is the Schema for the cluster-wide operator configuration.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              DepScanConfigSpec configures operator-wide scan behavior. A single
+              cluster-scoped object (conventionally named "default") drives the operator.
+            properties:
+              craneImage:
+                default: gcr.io/go-containerregistry/crane:latest
+                description: |-
+                  CraneImage is the image used to fetch each target image from its registry
+                  before scanning. The default works for public and private registries.
+                type: string
+              defectDojo:
+                description: DefectDojo enables and configures export of CSAF VEX
+                  reports.
+                properties:
+                  allowInsecureURL:
+                    description: |-
+                      AllowInsecureURL permits a plain http:// DefectDojo URL. Off by default
+                      so credentials are not sent in cleartext by misconfiguration.
+                    type: boolean
+                  closeOldFindings:
+                    default: true
+                    description: CloseOldFindings maps to the reimport-scan close_old_findings
+                      flag.
+                    type: boolean
+                  credentialsSecret:
+                    description: |-
+                      CredentialsSecret references a Secret holding DefectDojo credentials.
+                      Expected keys: "username" (optional, default admin), "password".
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        description: Namespace defaults to the operator namespace
+                          when empty.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  enabled:
+                    description: Enabled gates all DefectDojo export.
+                    type: boolean
+                  engagementName:
+                    default: Cluster Dep-Scan Reachability Analysis
+                    description: EngagementName is the engagement used for all uploads.
+                    type: string
+                  productNameTemplate:
+                    default: '{namespace}'
+                    description: |-
+                      ProductNameTemplate builds the DefectDojo product name. Supports the
+                      placeholders {namespace} and {image}. Defaults to "{namespace}".
+                    type: string
+                  productType:
+                    default: Research and Development
+                    description: ProductType is the product type used for auto-created
+                      products.
+                    type: string
+                  scanType:
+                    default: CSAF Scan
+                    description: ScanType is the DefectDojo scan type for the uploaded
+                      report.
+                    type: string
+                  url:
+                    description: URL is the DefectDojo base URL.
+                    type: string
+                required:
+                - credentialsSecret
+                - enabled
+                - url
+                type: object
+              excludeNamespaces:
+                description: |-
+                  ExcludeNamespaces are never scanned. The operator's own namespace and
+                  kube-system are good candidates.
+                items:
+                  type: string
+                type: array
+              includeNamespaces:
+                description: |-
+                  IncludeNamespaces restricts scanning to these namespaces. Empty means
+                  all namespaces except those in ExcludeNamespaces.
+                items:
+                  type: string
+                type: array
+              jobNamespace:
+                description: |-
+                  JobNamespace is where scan Jobs are created. Defaults to the operator
+                  namespace when empty.
+                type: string
+              jobTTLSeconds:
+                default: 600
+                description: JobTTLSeconds is the TTL applied to finished scan Jobs.
+                format: int32
+                type: integer
+              maxConcurrentScans:
+                default: 5
+                description: |-
+                  MaxConcurrentScans caps how many scan Jobs run at once, bounding the
+                  number of heavy scan pods a burst of new images can create. 0 uses the
+                  default.
+                format: int32
+                type: integer
+              rescanInterval:
+                default: 24h
+                description: |-
+                  RescanInterval is how long a report stays valid before the image is
+                  rescanned. Expressed as a Go duration string (e.g. "24h").
+                type: string
+              resources:
+                description: Resources are the resource requirements applied to scan
+                  Jobs.
+                properties:
+                  limits:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  requests:
+                    additionalProperties:
+                      type: string
+                    type: object
+                type: object
+              scannerImage:
+                default: ghcr.io/owasp-dep-scan/dep-scan:latest
+                description: ScannerImage is the dep-scan container image to run.
+                type: string
+              vdbCache:
+                description: |-
+                  VDBCache configures persistence of the dep-scan vulnerability database
+                  to speed up subsequent scans.
+                properties:
+                  accessMode:
+                    default: ReadWriteOnce
+                    description: |-
+                      AccessMode is the PVC access mode for a provisioned cache. Use
+                      ReadWriteMany on multi-node clusters (e.g. with an EFS/NFS storage class)
+                      so scan pods on different nodes can share one cache; ReadWriteOnce only
+                      works when all scan pods land on a single node.
+                    enum:
+                    - ReadWriteOnce
+                    - ReadWriteMany
+                    type: string
+                  claimName:
+                    description: |-
+                      ClaimName is an existing PVC to mount at VDB_HOME. If empty and Enabled
+                      is true, the operator provisions one.
+                    type: string
+                  enabled:
+                    description: Enabled turns on PVC-backed caching of the VDB across
+                      scan Jobs.
+                    type: boolean
+                  size:
+                    default: 10Gi
+                    description: Size is the requested size when the operator provisions
+                      the PVC.
+                    type: string
+                  storageClassName:
+                    description: StorageClassName optionally pins the PVC storage
+                      class.
+                    type: string
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources: {}

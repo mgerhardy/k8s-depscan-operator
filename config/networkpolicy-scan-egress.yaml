@@ -1,0 +1,59 @@
+# Optional egress hardening for scan pods. NOT included in the default
+# `kubectl apply -k config/` bundle because the correct egress set is
+# cluster-specific; apply it explicitly:
+#
+#   kubectl apply -f config/networkpolicy-scan-egress.yaml
+#
+# It selects the operator's scan pods (by the managed-by label) in the
+# depscan-system namespace and:
+#   - denies all ingress (scan pods never serve traffic), and
+#   - allows egress to DNS and to external (non-cluster) addresses only,
+#     blocking the private RFC1918 ranges so a compromised scanner cannot
+#     reach the API server or other in-cluster workloads.
+#
+# IMPORTANT: if you scan images from an in-cluster or private-network registry
+# (for example an in-cluster Harbor, an integrated registry, or a registry on
+# an RFC1918 address), the except blocks below prevent the image pull. Add a
+# dedicated egress rule allowing that registry's CIDR/namespace, or remove the
+# matching except entry.
+#
+# Requires a CNI that enforces NetworkPolicy. Some default CNIs do not.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: depscan-scan-egress
+  namespace: depscan-system
+  labels:
+    app.kubernetes.io/name: k8s-depscan-operator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: k8s-depscan-operator
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []   # deny all ingress
+  egress:
+    # DNS resolution.
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # External (internet) egress for registry pulls, the VDB download, and
+    # advisory fetches. In-cluster/private ranges are excluded to block lateral
+    # movement; relax these if your registry lives on a private network.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: depscan-system
+  labels:
+    app.kubernetes.io/name: k8s-depscan-operator
+    app.kubernetes.io/managed-by: k8s-depscan-operator
