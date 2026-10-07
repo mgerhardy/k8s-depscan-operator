@@ -1,7 +1,7 @@
 # Build stage. --platform=$BUILDPLATFORM keeps the compiler running natively
 # and cross-compiles to the requested target, which is much faster than
 # emulating the build under QEMU for each architecture.
-FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.26.6@sha256:0d1d3a794be25f809dd2cb3160d8c73276c4056a9f8242a138e908ddeee7b6b6 AS builder
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.27.0@sha256:4013ae0f9e7994f8535c58c811f8f863fbed38b72e0d51e6592156f758d66146 AS builder
 
 WORKDIR /workspace
 
