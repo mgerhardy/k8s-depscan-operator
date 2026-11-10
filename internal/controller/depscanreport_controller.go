@@ -567,13 +567,15 @@ func (r *DepScanReportReconciler) exportToDefectDojo(ctx context.Context, report
 	productName := renderProductName(dd.ProductNameTemplate, report.Namespace, report.Spec.Image)
 
 	return uploader.Reimport(ctx, defectdojo.ReimportParams{
-		ScanType:         dd.ScanType,
-		ProductName:      productName,
-		ProductType:      dd.ProductType,
-		EngagementName:   dd.EngagementName,
-		TestTitle:        report.Spec.Image,
-		Filename:         naming.ReportName(report.Spec.Image) + ".csaf.json",
-		Report:           []byte(csafJSON),
+		ScanType:       dd.ScanType,
+		ProductName:    productName,
+		ProductType:    dd.ProductType,
+		EngagementName: dd.EngagementName,
+		TestTitle:      report.Spec.Image,
+		Filename:       naming.ReportName(report.Spec.Image) + ".csaf.json",
+		// Cap over-long composite cve ids so a single finding cannot overflow
+		// DefectDojo's Finding.cve column and fail the whole reimport (HTTP 500).
+		Report:           defectdojo.SanitizeCSAFForDefectDojo([]byte(csafJSON)),
 		CloseOldFindings: dd.CloseOldFindings,
 	})
 }
