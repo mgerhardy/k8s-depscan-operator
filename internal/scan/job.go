@@ -28,6 +28,17 @@ const (
 	imageTar   = "/work/image.tar"
 	dockerCfg  = "/dockercfg"
 
+	// depScanUID/depScanGID are the uid/gid the dep-scan image runs as. The
+	// upstream image (ghcr.io/owasp-dep-scan/dep-scan) creates a non-root
+	// "owasp" user (USER owasp -> uid=1000 gid=1000) and makes /opt read-only,
+	// so it is designed to run non-root. The Job pods therefore run as this
+	// user with a matching fsGroup, which lets them write the emptyDir work and
+	// reports volumes (and read the VDB cache PVC) without root. This satisfies
+	// the "restricted" Pod Security Standard. crane (the fetch-image init
+	// container) also runs fine as this uid.
+	depScanUID int64 = 1000
+	depScanGID int64 = 1000
+
 	// DefaultCraneImage pulls images over the OCI Distribution API without a
 	// container runtime, so it works against any registry on any cluster.
 	DefaultCraneImage = depscanv1alpha1.DefaultCraneImage
@@ -252,15 +263,10 @@ fi
 					RestartPolicy: corev1.RestartPolicyNever,
 					// The scan workload needs no API access.
 					AutomountServiceAccountToken: boolPtr(false),
-					SecurityContext: &corev1.PodSecurityContext{
-						SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
-					},
-					InitContainers: initContainers,
-					Containers:     []corev1.Container{depscanContainer},
-					Volumes:        volumes,
-					// dep-scan runs as root to read the VDB cache and unpacked
-					// image layers, so runAsNonRoot is not enforced; privilege
-					// escalation and extra capabilities are still blocked.
+					SecurityContext:              restrictedPodSecurityContext(),
+					InitContainers:               initContainers,
+					Containers:                   []corev1.Container{depscanContainer},
+					Volumes:                      volumes,
 				},
 			},
 		},
@@ -292,6 +298,8 @@ func buildResources(r *depscanv1alpha1.ResourceRequirements) *corev1.ResourceReq
 
 func boolPtr(b bool) *bool { return &b }
 
+func int64Ptr(i int64) *int64 { return &i }
+
 // deadlineSeconds converts a timeout into activeDeadlineSeconds (nil for no
 // deadline).
 func deadlineSeconds(d time.Duration) *int64 {
@@ -305,13 +313,33 @@ func deadlineSeconds(d time.Duration) *int64 {
 	return &s
 }
 
-// hardenedContainerSecurityContext blocks privilege escalation and drops all
-// capabilities. runAsNonRoot is intentionally not set: dep-scan needs root to
-// read the VDB cache and unpacked image layers.
+// hardenedContainerSecurityContext blocks privilege escalation, drops all
+// capabilities, sets seccomp RuntimeDefault, and runs as the non-root dep-scan
+// user (uid 1000). The dep-scan image is built to run as this user, and the
+// Job pods mount only an emptyDir (work/reports) and a read-only VDB cache --
+// no host paths or unpacked layers that would need root -- so a matching
+// fsGroup on the pod makes everything readable/writable without root. This
+// keeps the pods within the "restricted" Pod Security Standard.
 func hardenedContainerSecurityContext() *corev1.SecurityContext {
 	return &corev1.SecurityContext{
 		AllowPrivilegeEscalation: boolPtr(false),
+		RunAsNonRoot:             boolPtr(true),
+		RunAsUser:                int64Ptr(depScanUID),
 		Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 		SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+	}
+}
+
+// restrictedPodSecurityContext is the pod-level counterpart: it pins the run-as
+// user/group and an fsGroup so the mounted emptyDir and PVC volumes are owned
+// by the dep-scan user, and sets seccomp RuntimeDefault. Used by every Job pod
+// (scan, VDB prime, VDB gc).
+func restrictedPodSecurityContext() *corev1.PodSecurityContext {
+	return &corev1.PodSecurityContext{
+		RunAsNonRoot:   boolPtr(true),
+		RunAsUser:      int64Ptr(depScanUID),
+		RunAsGroup:     int64Ptr(depScanGID),
+		FSGroup:        int64Ptr(depScanGID),
+		SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 	}
 }

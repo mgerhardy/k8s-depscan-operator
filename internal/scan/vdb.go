@@ -166,10 +166,8 @@ printf '%%s' "$key" > /dev/termination-log
 				Spec: corev1.PodSpec{
 					RestartPolicy:                corev1.RestartPolicyNever,
 					AutomountServiceAccountToken: boolPtr(false),
-					SecurityContext: &corev1.PodSecurityContext{
-						SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
-					},
-					Containers: []corev1.Container{container},
+					SecurityContext:              restrictedPodSecurityContext(),
+					Containers:                   []corev1.Container{container},
 					Volumes: []corev1.Volume{{
 						Name: "vdb",
 						VolumeSource: corev1.VolumeSource{
@@ -247,9 +245,7 @@ done
 				Spec: corev1.PodSpec{
 					RestartPolicy:                corev1.RestartPolicyNever,
 					AutomountServiceAccountToken: boolPtr(false),
-					SecurityContext: &corev1.PodSecurityContext{
-						SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
-					},
+					SecurityContext:              restrictedPodSecurityContext(),
 					Containers: []corev1.Container{{
 						Name:            "vdb-gc",
 						Image:           cfg.ScannerImage,

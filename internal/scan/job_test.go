@@ -170,6 +170,20 @@ func TestBuildJob_Hardening(t *testing.T) {
 		spec.SecurityContext.SeccompProfile.Type != corev1.SeccompProfileTypeRuntimeDefault {
 		t.Error("pod should set seccompProfile RuntimeDefault")
 	}
+	// The dep-scan image runs as the non-root owasp user (uid 1000); the pod
+	// must run as that user with a matching fsGroup so it satisfies the
+	// "restricted" Pod Security Standard and can still write the emptyDir
+	// volumes and read the VDB cache.
+	if psc := spec.SecurityContext; psc == nil || psc.RunAsNonRoot == nil || !*psc.RunAsNonRoot {
+		t.Error("pod should set runAsNonRoot=true")
+	} else {
+		if psc.RunAsUser == nil || *psc.RunAsUser != depScanUID {
+			t.Errorf("pod runAsUser should be %d", depScanUID)
+		}
+		if psc.FSGroup == nil || *psc.FSGroup != depScanGID {
+			t.Errorf("pod fsGroup should be %d", depScanGID)
+		}
+	}
 
 	all := append([]corev1.Container{}, spec.InitContainers...)
 	all = append(all, spec.Containers...)
@@ -183,6 +197,9 @@ func TestBuildJob_Hardening(t *testing.T) {
 		}
 		if sc.Capabilities == nil || len(sc.Capabilities.Drop) == 0 || sc.Capabilities.Drop[0] != "ALL" {
 			t.Errorf("container %s should drop ALL capabilities", c.Name)
+		}
+		if sc.RunAsNonRoot == nil || !*sc.RunAsNonRoot {
+			t.Errorf("container %s should set runAsNonRoot=true", c.Name)
 		}
 	}
 }
