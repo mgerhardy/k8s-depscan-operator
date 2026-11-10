@@ -230,6 +230,7 @@ func (r *DepScanReportReconciler) startScan(ctx context.Context, report *depscan
 		Scope:              vdbScope(cfg),
 		Resources:          cfg.Resources,
 		DockerConfigSecret: dockerCfgSecret,
+		ImagePullSecrets:   cfg.ImagePullSecrets,
 		MarkerNonce:        nonce,
 		Platform:           scanPlatform(cfg, report),
 		Timeout:            cfg.ScanTimeout.Duration,

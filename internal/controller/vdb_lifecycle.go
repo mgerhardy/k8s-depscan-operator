@@ -330,15 +330,16 @@ func vdbScope(cfg depscanv1alpha1.DepScanConfigSpec) string {
 
 func (r *DepScanReportReconciler) createPrimeJob(ctx context.Context, cfg depscanv1alpha1.DepScanConfigSpec, jobNS, claim string, force bool) error {
 	job := scan.BuildPrimeJob(scan.PrimeJobConfig{
-		ScannerImage: cfg.ScannerImage,
-		Namespace:    jobNS,
-		VDBClaim:     claim,
-		TTLSeconds:   cfg.JobTTLSeconds,
-		Resources:    cfg.Resources,
-		DownloadURL:  cfg.VDBCache.DownloadURL,
-		Scope:        cfg.VDBCache.Scope,
-		Force:        force,
-		Timeout:      primeTimeout(cfg),
+		ScannerImage:     cfg.ScannerImage,
+		Namespace:        jobNS,
+		VDBClaim:         claim,
+		TTLSeconds:       cfg.JobTTLSeconds,
+		Resources:        cfg.Resources,
+		DownloadURL:      cfg.VDBCache.DownloadURL,
+		Scope:            cfg.VDBCache.Scope,
+		Force:            force,
+		Timeout:          primeTimeout(cfg),
+		ImagePullSecrets: cfg.ImagePullSecrets,
 	})
 	if err := r.Create(ctx, job); err != nil && !apierrors.IsAlreadyExists(err) {
 		return err
@@ -436,11 +437,12 @@ func (r *DepScanReportReconciler) gcVDBVersions(ctx context.Context, cfg depscan
 		keep = append(keep, v)
 	}
 	job := scan.BuildVDBGCJob(scan.VDBGCJobConfig{
-		ScannerImage: cfg.ScannerImage,
-		Namespace:    jobNS,
-		VDBClaim:     claim,
-		TTLSeconds:   cfg.JobTTLSeconds,
-		KeepVersions: keep,
+		ScannerImage:     cfg.ScannerImage,
+		Namespace:        jobNS,
+		VDBClaim:         claim,
+		TTLSeconds:       cfg.JobTTLSeconds,
+		KeepVersions:     keep,
+		ImagePullSecrets: cfg.ImagePullSecrets,
 	})
 	if err := r.Create(ctx, job); err != nil && !apierrors.IsAlreadyExists(err) {
 		log.FromContext(ctx).Error(err, "create vdb gc job")

@@ -29,6 +29,17 @@ type DepScanConfigSpec struct {
 	// +kubebuilder:default="gcr.io/go-containerregistry/crane:v0.22.1@sha256:1f968817b95790bed063f71175aa6b8ff879fa17064020415f3e18bb6e6a36e1"
 	CraneImage string `json:"craneImage,omitempty"`
 
+	// ImagePullSecrets are Secret names in the job namespace that the kubelet
+	// uses to pull the scanner and crane images themselves (the Job pods'
+	// imagePullSecrets). This is separate from the per-target registry
+	// credentials the operator builds for crane: those let crane pull the image
+	// under scan, whereas these let the node pull the ScannerImage/CraneImage
+	// when they live in a private registry (e.g. an internal Artifactory the
+	// cluster cannot reach anonymously). Each entry names a
+	// kubernetes.io/dockerconfigjson Secret that already exists in JobNamespace.
+	// +optional
+	ImagePullSecrets []string `json:"imagePullSecrets,omitempty"`
+
 	// ScanProfile is dep-scan's analysis profile (its --profile value).
 	// "research" enables reachability analysis; "generic" is a faster scan
 	// without it. See dep-scan docs for the full list.

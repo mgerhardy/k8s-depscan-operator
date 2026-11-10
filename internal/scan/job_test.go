@@ -281,3 +281,35 @@ func TestBuildJob_DeadlineAndScratchLimit(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildJob_ImagePullSecrets(t *testing.T) {
+	// No pull secrets configured: the field is omitted entirely.
+	bare := BuildJob(JobConfig{
+		Image:        "registry.example.com/app:1.2.3",
+		ScannerImage: "ghcr.io/owasp-dep-scan/dep-scan:latest",
+		Namespace:    "depscan-system",
+	})
+	if ps := bare.Spec.Template.Spec.ImagePullSecrets; ps != nil {
+		t.Errorf("imagePullSecrets should be nil when none configured, got %+v", ps)
+	}
+
+	// Configured secrets become the pod's imagePullSecrets, in order, with
+	// blanks dropped.
+	job := BuildJob(JobConfig{
+		Image:            "registry.example.com/app:1.2.3",
+		ScannerImage:     "clx-thirdparty-docker.example.com/owasp-dep-scan/dep-scan:v6.3.0",
+		CraneImage:       "clx-thirdparty-docker.example.com/go-containerregistry/crane:v0.22.1",
+		Namespace:        "depscan-system",
+		ImagePullSecrets: []string{"clx-docker-registry-secret", "", "extra-secret"},
+	})
+	got := job.Spec.Template.Spec.ImagePullSecrets
+	want := []string{"clx-docker-registry-secret", "extra-secret"}
+	if len(got) != len(want) {
+		t.Fatalf("imagePullSecrets = %+v, want %v", got, want)
+	}
+	for i, w := range want {
+		if got[i].Name != w {
+			t.Errorf("imagePullSecrets[%d] = %q, want %q", i, got[i].Name, w)
+		}
+	}
+}

@@ -71,6 +71,11 @@ type JobConfig struct {
 	// anonymous pulls.
 	DockerConfigSecret string
 	Platform           string // e.g. "linux/amd64"; defaults to linux/amd64
+	// ImagePullSecrets are Secret names in the Job namespace set as the Job
+	// pod's imagePullSecrets, so the kubelet can pull the scanner and crane
+	// images from a private registry. Distinct from DockerConfigSecret, which
+	// only lets crane pull the image under scan.
+	ImagePullSecrets []string
 	// Timeout sets the Job's activeDeadlineSeconds; zero means no deadline.
 	Timeout time.Duration
 	// WorkSizeLimit caps the image-archive scratch emptyDir; nil means
@@ -270,6 +275,7 @@ fi
 					// The scan workload needs no API access.
 					AutomountServiceAccountToken: boolPtr(false),
 					SecurityContext:              restrictedPodSecurityContext(),
+					ImagePullSecrets:             pullSecretRefs(cfg.ImagePullSecrets),
 					InitContainers:               initContainers,
 					Containers:                   []corev1.Container{depscanContainer},
 					Volumes:                      volumes,
@@ -305,6 +311,25 @@ func buildResources(r *depscanv1alpha1.ResourceRequirements) *corev1.ResourceReq
 func boolPtr(b bool) *bool { return &b }
 
 func int64Ptr(i int64) *int64 { return &i }
+
+// pullSecretRefs converts Secret names into LocalObjectReferences for a pod's
+// imagePullSecrets, returning nil for an empty list so the field is omitted.
+func pullSecretRefs(names []string) []corev1.LocalObjectReference {
+	if len(names) == 0 {
+		return nil
+	}
+	refs := make([]corev1.LocalObjectReference, 0, len(names))
+	for _, n := range names {
+		if n == "" {
+			continue
+		}
+		refs = append(refs, corev1.LocalObjectReference{Name: n})
+	}
+	if len(refs) == 0 {
+		return nil
+	}
+	return refs
+}
 
 // deadlineSeconds converts a timeout into activeDeadlineSeconds (nil for no
 // deadline).

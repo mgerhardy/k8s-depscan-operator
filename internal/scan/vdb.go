@@ -45,6 +45,9 @@ type PrimeJobConfig struct {
 	Force bool
 	// Timeout sets the Job's activeDeadlineSeconds; zero means no deadline.
 	Timeout time.Duration
+	// ImagePullSecrets are set as the prime pod's imagePullSecrets so the
+	// kubelet can pull ScannerImage from a private registry.
+	ImagePullSecrets []string
 }
 
 // BuildPrimeJob builds a Job that downloads the dep-scan VDB into a temp dir,
@@ -169,6 +172,7 @@ printf '%%s' "$key" > /dev/termination-log
 					RestartPolicy:                corev1.RestartPolicyNever,
 					AutomountServiceAccountToken: boolPtr(false),
 					SecurityContext:              restrictedPodSecurityContext(),
+					ImagePullSecrets:             pullSecretRefs(cfg.ImagePullSecrets),
 					Containers:                   []corev1.Container{container},
 					Volumes: append([]corev1.Volume{{
 						Name: "vdb",
@@ -192,6 +196,9 @@ type VDBGCJobConfig struct {
 	VDBClaim     string
 	TTLSeconds   int32
 	KeepVersions []string // version dirs to preserve (current + in-use)
+	// ImagePullSecrets are set as the GC pod's imagePullSecrets so the kubelet
+	// can pull ScannerImage from a private registry.
+	ImagePullSecrets []string
 }
 
 // BuildVDBGCJob builds a Job that removes stale per-version directories from the
@@ -248,6 +255,7 @@ done
 					RestartPolicy:                corev1.RestartPolicyNever,
 					AutomountServiceAccountToken: boolPtr(false),
 					SecurityContext:              restrictedPodSecurityContext(),
+					ImagePullSecrets:             pullSecretRefs(cfg.ImagePullSecrets),
 					Containers: []corev1.Container{{
 						Name:            "vdb-gc",
 						Image:           cfg.ScannerImage,
