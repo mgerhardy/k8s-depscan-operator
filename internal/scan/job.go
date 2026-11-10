@@ -27,6 +27,10 @@ const (
 	workDir    = "/work"
 	imageTar   = "/work/image.tar"
 	dockerCfg  = "/dockercfg"
+	// Writable scratch for the read-only root filesystem: /tmp (cdxgen
+	// extraction) and HOME (~/.cache, ~/.local/share/blintdb).
+	tmpDir  = "/tmp"
+	homeDir = "/home/depscan"
 
 	// depScanUID/depScanGID are the uid/gid the dep-scan image runs as. The
 	// upstream image (ghcr.io/owasp-dep-scan/dep-scan) creates a non-root
@@ -125,6 +129,8 @@ func BuildJob(cfg JobConfig) *batchv1.Job {
 		{Name: "work", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: cfg.WorkSizeLimit}}},
 		{Name: "reports", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: &reportsLimit}}},
 	}
+	scratchVols, scratchMounts, scratchEnv := scratchVolumes(cfg.WorkSizeLimit)
+	volumes = append(volumes, scratchVols...)
 	// vdbMount is where the scan container reads the VDB. With a shared cache
 	// it is a specific version subdir (read-only); otherwise a fresh emptyDir.
 	vdbMount := corev1.VolumeMount{Name: "vdb", MountPath: vdbHome}
@@ -216,18 +222,18 @@ fi
 		Name:    "depscan",
 		Image:   cfg.ScannerImage,
 		Command: []string{"/bin/sh", "-c", script},
-		Env: []corev1.EnvVar{
+		Env: append([]corev1.EnvVar{
 			// The image reference reaches the shell only as data, never as
 			// script text.
 			{Name: "SCAN_IMAGE", Value: cfg.Image},
 			{Name: "VDB_HOME", Value: vdbHome},
 			{Name: "DEPSCAN_NO_BANNER", Value: "true"},
-		},
-		VolumeMounts: []corev1.VolumeMount{
+		}, scratchEnv...),
+		VolumeMounts: append([]corev1.VolumeMount{
 			{Name: "work", MountPath: workDir},
 			{Name: "reports", MountPath: reportsDir},
 			vdbMount,
-		},
+		}, scratchMounts...),
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		SecurityContext: hardenedContainerSecurityContext(),
 	}
@@ -313,18 +319,33 @@ func deadlineSeconds(d time.Duration) *int64 {
 	return &s
 }
 
-// hardenedContainerSecurityContext blocks privilege escalation, drops all
-// capabilities, sets seccomp RuntimeDefault, and runs as the non-root dep-scan
-// user (uid 1000). The dep-scan image is built to run as this user, and the
-// Job pods mount only an emptyDir (work/reports) and a read-only VDB cache --
-// no host paths or unpacked layers that would need root -- so a matching
-// fsGroup on the pod makes everything readable/writable without root. This
-// keeps the pods within the "restricted" Pod Security Standard.
+// scratchVolumes returns emptyDir volumes, mounts and env for /tmp and HOME,
+// the only paths dep-scan writes outside the work/reports/vdb mounts.
+func scratchVolumes(limit *resource.Quantity) ([]corev1.Volume, []corev1.VolumeMount, []corev1.EnvVar) {
+	vols := []corev1.Volume{
+		{Name: "tmp", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: limit}}},
+		{Name: "home", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: limit}}},
+	}
+	mounts := []corev1.VolumeMount{
+		{Name: "tmp", MountPath: tmpDir},
+		{Name: "home", MountPath: homeDir},
+	}
+	env := []corev1.EnvVar{
+		{Name: "HOME", Value: homeDir},
+		{Name: "TMPDIR", Value: tmpDir},
+	}
+	return vols, mounts, env
+}
+
+// hardenedContainerSecurityContext: non-root uid 1000, read-only root fs, no
+// privilege escalation, all capabilities dropped, seccomp RuntimeDefault.
+// Writable paths are emptyDir/PVC mounts only. Meets PSS "restricted".
 func hardenedContainerSecurityContext() *corev1.SecurityContext {
 	return &corev1.SecurityContext{
 		AllowPrivilegeEscalation: boolPtr(false),
 		RunAsNonRoot:             boolPtr(true),
 		RunAsUser:                int64Ptr(depScanUID),
+		ReadOnlyRootFilesystem:   boolPtr(true),
 		Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 		SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 	}

@@ -133,13 +133,15 @@ printf '%%s' "$key" > /dev/termination-log
 
 	backoff := int32(2)
 	ttl := cfg.TTLSeconds
+	scratchVols, scratchMounts, scratchEnv := scratchVolumes(nil)
 	container := corev1.Container{
 		Name:                     PrimeContainerName,
 		Image:                    cfg.ScannerImage,
 		Command:                  []string{"/bin/sh", "-c", script},
+		Env:                      scratchEnv,
 		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-		VolumeMounts:             []corev1.VolumeMount{{Name: "vdb", MountPath: vdbRoot}},
+		VolumeMounts:             append([]corev1.VolumeMount{{Name: "vdb", MountPath: vdbRoot}}, scratchMounts...),
 		ImagePullPolicy:          corev1.PullIfNotPresent,
 		SecurityContext:          hardenedContainerSecurityContext(),
 	}
@@ -168,12 +170,12 @@ printf '%%s' "$key" > /dev/termination-log
 					AutomountServiceAccountToken: boolPtr(false),
 					SecurityContext:              restrictedPodSecurityContext(),
 					Containers:                   []corev1.Container{container},
-					Volumes: []corev1.Volume{{
+					Volumes: append([]corev1.Volume{{
 						Name: "vdb",
 						VolumeSource: corev1.VolumeSource{
 							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: cfg.VDBClaim},
 						},
-					}},
+					}}, scratchVols...),
 				},
 			},
 		},
