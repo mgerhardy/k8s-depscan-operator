@@ -19,13 +19,10 @@ The operator image is published at `docker.io/mgerhardy/k8s-depscan-operator`.
 
 ## What gets created
 
-- A `depscan-system` namespace for the controller and the scan Jobs, labeled
-  for the `baseline` Pod Security Standard. Scan pods run as root (dep-scan
-  reads root-owned image layers), so the namespace cannot enforce
-  `restricted`; they still drop all capabilities, block privilege escalation
-  and use the `RuntimeDefault` seccomp profile. If your cluster manages
-  Pod Security centrally (Kyverno, Gatekeeper, a PSA exemption list), allow
-  these pods there as well.
+- A `depscan-system` namespace for the controller and the scan Jobs, enforcing
+  the `restricted` Pod Security Standard. All pods run non-root (uid 1000)
+  with a read-only root filesystem, no privilege escalation, all capabilities
+  dropped and the `RuntimeDefault` seccomp profile.
 - The `DepScanConfig` (cluster-scoped) and `DepScanReport` (namespaced) CRDs.
 - A ServiceAccount, Role/ClusterRole, and bindings for the controller. The
   ClusterRole is read-only apart from `DepScanReport`s (pods, services,
@@ -63,7 +60,7 @@ example one with dedicated nodes or quotas), prepare it before setting
     ```bash
     kubectl create namespace depscan-jobs
     kubectl label namespace depscan-jobs \
-      pod-security.kubernetes.io/enforce=baseline \
+      pod-security.kubernetes.io/enforce=restricted \
       pod-security.kubernetes.io/enforce-version=latest
     ```
 

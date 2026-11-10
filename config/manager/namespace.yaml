@@ -5,13 +5,9 @@ metadata:
   labels:
     app.kubernetes.io/name: k8s-depscan-operator
     app.kubernetes.io/managed-by: k8s-depscan-operator
-    # Scan, prime and GC pods run as root (dep-scan reads root-owned image
-    # layers and the VDB cache), so the namespace cannot be "restricted".
-    # "baseline" still forbids privileged pods, host namespaces/paths and added
-    # capabilities; the operator's pods drop all capabilities and use the
-    # RuntimeDefault seccomp profile. Without an explicit label, clusters that
-    # enforce "restricted" by default reject every scan pod.
-    pod-security.kubernetes.io/enforce: baseline
+    # All operator pods run non-root (uid 1000), read-only rootfs, drop ALL
+    # caps, seccomp RuntimeDefault -> PSS "restricted".
+    pod-security.kubernetes.io/enforce: restricted
     pod-security.kubernetes.io/enforce-version: latest
-    pod-security.kubernetes.io/warn: baseline
-    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
