@@ -10,8 +10,9 @@ import (
 // HTTP 500 (StringDataRightTruncation), so the value is capped before upload.
 const maxCVELen = 50
 
-// SanitizeCSAFForDefectDojo caps each vulnerabilities[].cve in a dep-scan CSAF
-// document to what DefectDojo's Finding.cve column accepts (varchar(50)).
+// SanitizeCSAFForDefectDojo caps each vulnerabilities[].cve (and every
+// vulnerabilities[].ids[].text) in a dep-scan CSAF document to what DefectDojo's
+// Finding.cve column accepts (varchar(50)).
 //
 // dep-scan sometimes emits a composite identifier in the CSAF "cve" field --
 // the advisory id joined to the affected package URL, e.g.
@@ -46,12 +47,26 @@ func SanitizeCSAFForDefectDojo(csaf []byte) []byte {
 		if !ok {
 			continue
 		}
-		cve, ok := vm["cve"].(string)
-		if !ok || len(cve) <= maxCVELen {
-			continue
+		if cve, ok := vm["cve"].(string); ok && len(cve) > maxCVELen {
+			vm["cve"] = capCVE(cve)
+			changed = true
 		}
-		vm["cve"] = capCVE(cve)
-		changed = true
+		// DefectDojo's CSAF parser also derives Finding vulnerability ids (and
+		// thus the varchar(50) cve column) from vulnerabilities[].ids[].text --
+		// used as the identifier when "cve" is empty. Cap those too so a long
+		// advisory id there cannot overflow the column and fail the reimport.
+		if ids, ok := vm["ids"].([]any); ok {
+			for _, e := range ids {
+				em, ok := e.(map[string]any)
+				if !ok {
+					continue
+				}
+				if text, ok := em["text"].(string); ok && len(text) > maxCVELen {
+					em["text"] = capCVE(text)
+					changed = true
+				}
+			}
+		}
 	}
 	if !changed {
 		return csaf

@@ -225,3 +225,45 @@ func TestSummaryReachableBySeverity(t *testing.T) {
 		t.Errorf("summary = %+v", s)
 	}
 }
+
+// TestParseVDR_StringScore guards the regression where dep-scan v6.3.x emits
+// ratings[].score as a quoted string, which previously failed the entire VDR
+// decode and lost the report.
+func TestParseVDR_StringScore(t *testing.T) {
+	const vdr = `{
+  "bomFormat": "CycloneDX",
+  "vulnerabilities": [
+    {"id": "CVE-2026-1", "affects": [{"ref": "pkg:npm/a@1.0.0"}],
+     "ratings": [{"severity": "critical", "score": "9.8"}]},
+    {"id": "CVE-2026-2", "affects": [{"ref": "pkg:npm/b@1.0.0"}],
+     "ratings": [{"severity": "high", "score": 7.5}]},
+    {"id": "CVE-2026-3", "affects": [{"ref": "pkg:npm/c@1.0.0"}],
+     "ratings": [{"severity": "medium", "score": ""}]},
+    {"id": "CVE-2026-4", "affects": [{"ref": "pkg:npm/d@1.0.0"}],
+     "ratings": [{"severity": "low", "score": "not-a-number"}]}
+  ]
+}`
+	res, err := ParseVDR([]byte(vdr))
+	if err != nil {
+		t.Fatalf("ParseVDR returned error on string score: %v", err)
+	}
+	if got := len(res.Vulnerabilities); got != 4 {
+		t.Fatalf("vulnerability count = %d, want 4", got)
+	}
+	byID := map[string]string{}
+	for _, v := range res.Vulnerabilities {
+		byID[v.VulnerabilityID] = v.Score
+	}
+	if byID["CVE-2026-1"] != "9.8" {
+		t.Errorf("string score 9.8 = %q, want 9.8", byID["CVE-2026-1"])
+	}
+	if byID["CVE-2026-2"] != "7.5" {
+		t.Errorf("numeric score 7.5 = %q, want 7.5", byID["CVE-2026-2"])
+	}
+	if byID["CVE-2026-3"] != "" {
+		t.Errorf("empty score = %q, want empty", byID["CVE-2026-3"])
+	}
+	if byID["CVE-2026-4"] != "" {
+		t.Errorf("unparseable score = %q, want empty (tolerated)", byID["CVE-2026-4"])
+	}
+}

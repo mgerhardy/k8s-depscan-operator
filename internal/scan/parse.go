@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -32,9 +33,51 @@ type vdrVuln struct {
 }
 
 type vdrRating struct {
-	Severity string   `json:"severity"`
-	Score    *float64 `json:"score"`
-	Method   string   `json:"method"`
+	Severity string    `json:"severity"`
+	Score    flexFloat `json:"score"`
+	Method   string    `json:"method"`
+}
+
+// flexFloat decodes a CVSS score that dep-scan may emit either as a JSON number
+// (9.8) or as a JSON string ("9.8"). dep-scan v6.3.x started quoting the score
+// for some advisories, which made a plain *float64 field fail the whole VDR
+// decode ("cannot unmarshal string ... into float64") and lose the report.
+// A nil Value means the score was absent, null, or unparseable.
+type flexFloat struct {
+	Value *float64
+}
+
+// UnmarshalJSON accepts a number, a quoted number, null, or an empty string.
+// An unparseable non-empty string is tolerated as "no score" rather than
+// failing the decode of the entire document.
+func (f *flexFloat) UnmarshalJSON(data []byte) error {
+	s := strings.TrimSpace(string(data))
+	if s == "" || s == "null" {
+		return nil
+	}
+	// Strip surrounding quotes if dep-scan sent the score as a JSON string.
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		var str string
+		if err := json.Unmarshal(data, &str); err != nil {
+			return err
+		}
+		str = strings.TrimSpace(str)
+		if str == "" {
+			return nil
+		}
+		v, err := strconv.ParseFloat(str, 64)
+		if err != nil {
+			return nil // tolerate a non-numeric score string as absent
+		}
+		f.Value = &v
+		return nil
+	}
+	var v float64
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	f.Value = &v
+	return nil
 }
 
 type vdrAffect struct {
@@ -113,8 +156,8 @@ func ParseReports(vdrData, csafData []byte) (*Result, error) {
 			Title:           firstNonEmpty(truncate(v.Description, maxTitleLen)),
 			Reachability:    reach,
 		}
-		if r := topRating(v.Ratings); r.Score != nil {
-			vuln.Score = strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.1f", *r.Score), "0"), ".")
+		if r := topRating(v.Ratings); r.Score.Value != nil {
+			vuln.Score = strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.1f", *r.Score.Value), "0"), ".")
 		}
 		if v.Source != nil && v.Source.URL != "" {
 			vuln.PrimaryLink = v.Source.URL

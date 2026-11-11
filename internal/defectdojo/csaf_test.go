@@ -88,3 +88,43 @@ func TestSanitizeCSAF_InvalidJSONReturnedUnchanged(t *testing.T) {
 		t.Errorf("nil should be returned as nil, got %q", got)
 	}
 }
+
+func TestSanitizeCSAF_CapsOverlongIdsText(t *testing.T) {
+	// DefectDojo falls back to vulnerabilities[].ids[].text for the identifier
+	// when "cve" is empty; an over-long value there must also be capped.
+	in := []byte(`{"vulnerabilities":[{"cve":"","ids":[` +
+		`{"system_name":"GitHub","text":"GHSA-xxxx-yyyy-zzzz/pkg:golang/golang.org/x/net@v0.44.0"},` +
+		`{"system_name":"CVE","text":"CVE-2025-1"}]}]}`)
+	out := SanitizeCSAFForDefectDojo(in)
+	var doc map[string]any
+	if err := json.Unmarshal(out, &doc); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	ids := doc["vulnerabilities"].([]any)[0].(map[string]any)["ids"].([]any)
+	first := ids[0].(map[string]any)["text"].(string)
+	if first != "GHSA-xxxx-yyyy-zzzz" {
+		t.Errorf("ids[0].text = %q, want %q", first, "GHSA-xxxx-yyyy-zzzz")
+	}
+	if second := ids[1].(map[string]any)["text"].(string); second != "CVE-2025-1" {
+		t.Errorf("ids[1].text = %q, want it untouched", second)
+	}
+}
+
+func TestSanitizeCSAF_CapsBothCVEAndIdsText(t *testing.T) {
+	in := []byte(`{"vulnerabilities":[{` +
+		`"cve":"GO-2026-5932/pkg:golang/golang.org/x/crypto@v0.55.0",` +
+		`"ids":[{"text":"` + strings.Repeat("Z", 70) + `"}]}]}`)
+	res := SanitizeCSAFForDefectDojo(in)
+	var doc map[string]any
+	if err := json.Unmarshal(res, &doc); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	v := doc["vulnerabilities"].([]any)[0].(map[string]any)
+	if cve := v["cve"].(string); len(cve) > maxCVELen {
+		t.Errorf("cve still too long: %q", cve)
+	}
+	txt := v["ids"].([]any)[0].(map[string]any)["text"].(string)
+	if len(txt) != maxCVELen {
+		t.Errorf("ids text len = %d, want %d", len(txt), maxCVELen)
+	}
+}
