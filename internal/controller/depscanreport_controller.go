@@ -386,7 +386,7 @@ func (r *DepScanReportReconciler) ingest(ctx context.Context, report *depscanv1a
 	r.recomputeVulnerabilityGauges(ctx)
 
 	if cfg.DefectDojo != nil && cfg.DefectDojo.Enabled {
-		r.exportResult(ctx, report, cfg, csafJSON)
+		r.exportResult(ctx, report, cfg, vdrJSON, csafJSON)
 	}
 	return ctrl.Result{RequeueAfter: cfg.RescanInterval.Duration}, nil
 }
@@ -394,9 +394,9 @@ func (r *DepScanReportReconciler) ingest(ctx context.Context, report *depscanv1a
 // exportResult uploads the CSAF report to DefectDojo and records the outcome
 // with a status patch. Upload errors (which may echo the server's response)
 // go to the operator log; the tenant-visible status only names the failure.
-func (r *DepScanReportReconciler) exportResult(ctx context.Context, report *depscanv1alpha1.DepScanReport, cfg depscanv1alpha1.DepScanConfigSpec, csafJSON string) {
+func (r *DepScanReportReconciler) exportResult(ctx context.Context, report *depscanv1alpha1.DepScanReport, cfg depscanv1alpha1.DepScanConfigSpec, vdrJSON, csafJSON string) {
 	base := report.DeepCopy()
-	switch err := r.exportToDefectDojo(ctx, report, cfg, csafJSON); {
+	switch err := r.exportToDefectDojo(ctx, report, cfg, vdrJSON, csafJSON); {
 	case strings.TrimSpace(csafJSON) == "":
 		report.Status.Message += "; defectdojo export skipped: dep-scan produced no CSAF report"
 		metrics.ReportsExported.WithLabelValues("failed").Inc()
@@ -541,7 +541,7 @@ func (r *DepScanReportReconciler) maybeRescan(ctx context.Context, report *depsc
 	return ctrl.Result{RequeueAfter: time.Until(due)}, nil
 }
 
-func (r *DepScanReportReconciler) exportToDefectDojo(ctx context.Context, report *depscanv1alpha1.DepScanReport, cfg depscanv1alpha1.DepScanConfigSpec, csafJSON string) error {
+func (r *DepScanReportReconciler) exportToDefectDojo(ctx context.Context, report *depscanv1alpha1.DepScanReport, cfg depscanv1alpha1.DepScanConfigSpec, vdrJSON, csafJSON string) error {
 	if strings.TrimSpace(csafJSON) == "" {
 		return nil // nothing to upload; the caller reports the skip
 	}
@@ -573,9 +573,14 @@ func (r *DepScanReportReconciler) exportToDefectDojo(ctx context.Context, report
 		EngagementName: dd.EngagementName,
 		TestTitle:      report.Spec.Image,
 		Filename:       naming.ReportName(report.Spec.Image) + ".csaf.json",
-		// Cap over-long composite cve ids so a single finding cannot overflow
-		// DefectDojo's Finding.cve column and fail the whole reimport (HTTP 500).
-		Report:           defectdojo.SanitizeCSAFForDefectDojo([]byte(csafJSON)),
+		// Backfill a CVSS severity from the VDR onto CSAF findings that lack
+		// one, so DefectDojo classifies OS/distro advisories by their real
+		// severity instead of defaulting them all to Medium. Then cap over-long
+		// composite cve ids so a single finding cannot overflow DefectDojo's
+		// Finding.cve column and fail the whole reimport (HTTP 500).
+		Report: defectdojo.SanitizeCSAFForDefectDojo(
+			defectdojo.EnrichCSAFScoresFromVDR([]byte(csafJSON), []byte(vdrJSON)),
+		),
 		CloseOldFindings: dd.CloseOldFindings,
 	})
 }
