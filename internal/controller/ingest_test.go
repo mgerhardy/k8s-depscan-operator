@@ -112,7 +112,7 @@ func TestExportFailureKeepsResponseBodyOutOfStatus(t *testing.T) {
 		CredentialsSecret: depscanv1alpha1.SecretRef{Name: "dd"},
 	}
 
-	r.exportResult(context.Background(), rep, cfg, "", `{"document":{}}`)
+	r.exportResult(context.Background(), rep, cfg, `{"document":{}}`)
 
 	var got depscanv1alpha1.DepScanReport
 	_ = c.Get(context.Background(), types.NamespacedName{Namespace: "prod", Name: "r"}, &got)
