@@ -1,0 +1,29 @@
+apiVersion: v2
+name: depscan-operator
+description: >-
+  k8s-depscan-operator -- namespace, CRDs, RBAC and the controller Deployment.
+  Installs the operator that scans running images for CVE reachability and
+  (optionally) exports CSAF VEX reports to DefectDojo.
+type: application
+# Minimum Kubernetes version. The chart uses the PodSecurity admission labels
+# (GA in 1.25) and reads gateway.networking.k8s.io resources.
+kubeVersion: ">=1.25.0-0"
+# Chart version. Bumped on any chart change (templates or values).
+version: 0.1.0
+# The controller binary this chart installs. Tracks the operator release; the
+# vendored CRDs and RBAC (templates/crds.yaml, templates/rbac.yaml) are
+# regenerated from the same source tree, so appVersion and those manifests stay
+# in lockstep. Override image.tag/image.digest in values to pin a build.
+appVersion: "0.99.6"
+home: https://github.com/mgerhardy/k8s-depscan-operator
+sources:
+  - https://github.com/mgerhardy/k8s-depscan-operator
+keywords:
+  - security
+  - cve
+  - reachability
+  - dep-scan
+  - defectdojo
+maintainers:
+  - name: mgerhardy
+    url: https://github.com/mgerhardy

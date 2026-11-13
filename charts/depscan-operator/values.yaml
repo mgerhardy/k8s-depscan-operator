@@ -1,0 +1,103 @@
+# Namespace the operator, its RBAC and (by default) its scan Jobs live in.
+# Used by the hand-written templates and injected into the vendored RBAC by
+# hack/gen-helm-chart.sh. Changing it relocates the whole install.
+namespace: depscan-system
+
+# Whether the chart creates the namespace. Disable if you manage it out of band
+# (e.g. a dedicated namespace with its own PodSecurity labels or quotas).
+createNamespace: true
+
+image:
+  repository: docker.io/mgerhardy/k8s-depscan-operator
+  # Pull by tag OR by digest. If digest is set it wins and tag is ignored, so a
+  # bump is an explicit, reproducible change (and RBAC/CRDs stay in lockstep
+  # with it). Leave digest empty to track the tag.
+  #   tag: "0.99.6"
+  #   digest: "sha256:..."
+  tag: ""        # defaults to .Chart.AppVersion when empty
+  digest: ""
+  # IfNotPresent suits a pinned tag/digest; use Always only with a floating tag.
+  pullPolicy: IfNotPresent
+  # Names of existing imagePullSecrets in .Values.namespace, if the image is
+  # behind a private registry.
+  pullSecrets: []
+
+# Extra args passed to the manager. The defaults wire leader election, health
+# probes and the secure metrics endpoint; append your own here.
+extraArgs: []
+
+# Controller resource requests/limits.
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Pod placement.
+nodeSelector: {}
+tolerations: []
+affinity: {}
+# Scheduling priority for the controller pod. Empty = cluster default.
+priorityClassName: ""
+
+# Extra metadata on the controller pod. podAnnotations is the usual place for
+# scrape hints, secret-injector markers or a config checksum that forces a
+# rollout; podLabels for org-specific selectors.
+podAnnotations: {}
+podLabels: {}
+
+# Pod-level security context. Defaults put the pod in the PodSecurity
+# "restricted" profile; override only if your platform needs an fsGroup or a
+# different non-root uid.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container-level security context, restated so stricter admission controllers
+# (Kyverno/OPA "restricted") pass without relying on image defaults.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+  capabilities:
+    drop:
+      - ALL
+
+# The authenticated metrics Service (https, port 8443). Scrape it with a
+# ServiceAccount bound to the depscan-metrics-reader ClusterRole.
+metricsService:
+  enabled: true
+  type: ClusterIP
+  port: 8443
+
+# Optional: ship the single cluster-scoped DepScanConfig the operator
+# reconciles. Disabled by default -- without it the operator runs but is inert,
+# and most installs want to manage the config as a separate, environment-owned
+# object. Enable and fill this in to bring the config under the chart. Every
+# field maps 1:1 onto DepScanConfig .spec; unset fields fall back to the CRD
+# defaults. See config/samples/depscanconfig.yaml for the full annotated spec.
+config:
+  enabled: false
+  # name: default
+  # scanProfile: research
+  # rescanInterval: 24h
+  # includeNamespaces: []
+  # excludeNamespaces: [kube-system, kube-public, kube-node-lease, depscan-system]
+  # scannerImage: ghcr.io/owasp-dep-scan/dep-scan:v6.3.0
+  # craneImage: ""
+  # vdbCache:
+  #   enabled: true
+  #   size: 100Gi
+  #   scope: app+os
+  #   storageClassName: ""
+  # defectDojo:
+  #   enabled: false
+  #   url: https://defectdojo.example.internal
+  #   credentialsSecretName: defectdojo-credentials

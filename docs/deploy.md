@@ -17,10 +17,26 @@ The operator image is published at `docker.io/mgerhardy/k8s-depscan-operator`.
     `imagePullPolicy: Always`. For reproducible installs, pin a release tag or
     digest there instead.
 
+## Install with Helm
+
+A Helm chart under `charts/depscan-operator` installs the same resources
+(namespace, CRDs, RBAC, controller) with the image, resources, placement and
+namespace exposed as values:
+
+```bash
+helm install depscan-operator ./charts/depscan-operator \
+  --set image.digest=sha256:<digest>   # pin a build; keeps CRDs/RBAC in lockstep
+```
+
+The chart's CRDs and RBAC are generated verbatim from `config/` (via
+`make helm`), so they cannot drift from the binary. Enable the bundled
+`DepScanConfig` with `--set config.enabled=true`, or apply your own as below.
+See `charts/depscan-operator/README.md` for the values reference.
+
 ## What gets created
 
 - A `depscan-system` namespace for the controller and the scan Jobs, enforcing
-  the `restricted` Pod Security Standard. All pods run non-root (uid 1000)
+  the `restricted` Pod Security Standard. All pods run non-root (uid 65532)
   with a read-only root filesystem, no privilege escalation, all capabilities
   dropped and the `RuntimeDefault` seccomp profile.
 - The `DepScanConfig` (cluster-scoped) and `DepScanReport` (namespaced) CRDs.

@@ -1,0 +1,88 @@
+{{- if and .Values.config .Values.config.enabled }}
+# The single cluster-scoped DepScanConfig the operator reconciles. Opt-in:
+# without it the operator runs but is inert (no scan scope, no export). Only the
+# fields set in values are emitted; everything else falls back to the CRD
+# defaults. Depends on the CRDs being installed first (helm applies CRDs and the
+# rest in one release, so a fresh install may need the CRDs to register before
+# this object is accepted -- re-running helm upgrade reconciles it).
+apiVersion: depscan.io/v1alpha1
+kind: DepScanConfig
+metadata:
+  name: {{ .Values.config.name | default "default" }}
+  labels:
+    {{- include "depscan-operator.labels" . | nindent 4 }}
+spec:
+  {{- with .Values.config.scanProfile }}
+  scanProfile: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.rescanInterval }}
+  rescanInterval: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.jobNamespace }}
+  jobNamespace: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.scannerImage }}
+  scannerImage: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.craneImage }}
+  craneImage: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.includeNamespaces }}
+  includeNamespaces:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.config.excludeNamespaces }}
+  excludeNamespaces:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.config.vdbCache }}
+  vdbCache:
+    enabled: {{ .enabled }}
+    {{- with .size }}
+    size: {{ . | quote }}
+    {{- end }}
+    {{- with .scope }}
+    scope: {{ . | quote }}
+    {{- end }}
+    {{- with .refreshInterval }}
+    refreshInterval: {{ . | quote }}
+    {{- end }}
+    {{- with .storageClassName }}
+    storageClassName: {{ . | quote }}
+    {{- end }}
+    {{- with .accessMode }}
+    accessMode: {{ . | quote }}
+    {{- end }}
+  {{- end }}
+  {{- with .Values.config.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.config.defectDojo }}
+  defectDojo:
+    enabled: {{ .enabled }}
+    {{- with .url }}
+    url: {{ . | quote }}
+    {{- end }}
+    {{- with .scanType }}
+    scanType: {{ . | quote }}
+    {{- end }}
+    {{- with .productType }}
+    productType: {{ . | quote }}
+    {{- end }}
+    {{- with .engagementName }}
+    engagementName: {{ . | quote }}
+    {{- end }}
+    {{- with .productNameTemplate }}
+    productNameTemplate: {{ . | quote }}
+    {{- end }}
+    {{- if hasKey . "closeOldFindings" }}
+    closeOldFindings: {{ .closeOldFindings }}
+    {{- end }}
+    {{- if .credentialsSecretName }}
+    credentialsSecret:
+      name: {{ .credentialsSecretName | quote }}
+      namespace: {{ $.Values.namespace | quote }}
+    {{- end }}
+  {{- end }}
+{{- end }}

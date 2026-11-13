@@ -1,0 +1,26 @@
+depscan-operator {{ .Chart.AppVersion }} installed in namespace "{{ .Values.namespace }}".
+
+Watch the controller come up:
+
+  kubectl -n {{ .Values.namespace }} rollout status deploy/depscan-operator
+
+{{ if and .Values.config .Values.config.enabled -}}
+A DepScanConfig ("{{ .Values.config.name | default "default" }}") was created from the chart. Check it was accepted:
+
+  kubectl get depscanconfig {{ .Values.config.name | default "default" }} -o jsonpath='{.status}{"\n"}'
+
+The first VDB prime downloads tens of GB, so "VDB Ready" stays False (reason
+Priming) for a while. Reports appear as images are discovered and scanned:
+
+  kubectl get dsr -A
+{{- else -}}
+IMPORTANT: no DepScanConfig was created, so the operator is running but INERT
+-- it has no scan scope and will do nothing until one exists. Either:
+
+  * enable the bundled config:  helm upgrade {{ .Release.Name }} <chart> --set config.enabled=true
+  * or apply your own:          kubectl apply -f config/samples/depscanconfig.yaml
+
+Then watch reports appear:
+
+  kubectl get dsr -A
+{{- end }}
